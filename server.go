@@ -2,10 +2,12 @@ package main
 
 import (
 	"github.com/gorilla/websocket"
+	"github.com/kr/pty"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 )
 
 var (
@@ -20,12 +22,49 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type wsPty struct {
+	Cmd *exec.Cmd // pty builds on os.exec
+	Pty *os.File  // a pty is simply an os.File
+}
+
+func (wp *wsPty) Start() {
+	var err error
+	wp.Cmd = exec.Command("/bin/bash", "--login")
+	wp.Pty, err = pty.Start(wp.Cmd)
+	if err != nil {
+		log.Fatalf("Failed to start command: %s\n", err)
+	}
+}
+
+func (wp *wsPty) Stop() {
+	wp.Pty.Close()
+	wp.Cmd.Wait()
+}
+
 func terminalHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Fatalf("Websocket upgrade failed: %s\n", err)
 	}
 	defer conn.Close()
+
+	wp := wsPty{}
+	// TODO: check for errors, return 500 on fail
+	wp.Start()
+
+	go func() {
+		buf := make([]byte, 128)
+		for {
+			n, err := wp.Pty.Read(buf)
+			if err != nil {
+				log.Fatalf("Failed to read from pty master: %s", err)
+			}
+			err = conn.WriteMessage(websocket.BinaryMessage, buf)
+			if err != nil {
+				log.Fatalf("Failed to send %d bytes on websocket: %s", n, err)
+			}
+		}
+	}()
 
 	for {
 		mt, payload, err := conn.ReadMessage()
@@ -36,13 +75,12 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		log.Printf("Bytes: %s\n", string(payload))
+		log.Printf("Received: '%s'\n", string(payload))
 
 		switch mt {
 		case websocket.BinaryMessage:
+			wp.Pty.Write(payload)
 		case websocket.TextMessage:
-		case websocket.PingMessage:
-		case websocket.PongMessage:
 		default:
 			log.Fatalf("Invalid message type %d\n", mt)
 		}
