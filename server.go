@@ -49,6 +49,13 @@ func (wp *wsPty) Start() {
 	var err error
 	args := flag.Args()
 	wp.Cmd = exec.Command(cmdFlag, args...)
+
+	wp.Cmd.Env = []string{
+		"TERM=xterm",
+		"LANG=en_US.utf8",
+		"PATH=/bin:/usr/local/bin",
+	}
+
 	wp.Pty, err = pty.Start(wp.Cmd)
 	if err != nil {
 		log.Fatalf("Failed to start command: %s\n", err)
