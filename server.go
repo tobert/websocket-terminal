@@ -1,7 +1,25 @@
 package main
 
+/*
+ * websocket/pty proxy server:
+ * This program wires a websocket to a pty master.
+ *
+ * Usage:
+ * go build -o ws-pty-proxy server.go
+ * ./ws-pty-proxy -cmd /bin/bash -addr :9000
+ *
+ * TODO:
+ *  * make more things configurable
+ *  * switch back to binary encoding after fixing term.js (see index.html)
+ *  * make errors return proper codes to the web client
+ *
+ * Copyright 2014 Al Tobey tobert@gmail.com
+ * MIT License, see the LICENSE file
+ */
+
 import (
 	"encoding/base64"
+	"flag"
 	"github.com/gorilla/websocket"
 	"github.com/kr/pty"
 	"io"
@@ -11,9 +29,7 @@ import (
 	"os/exec"
 )
 
-var (
-	addrFlag string
-)
+var addrFlag, cmdFlag string
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1,
@@ -30,7 +46,7 @@ type wsPty struct {
 
 func (wp *wsPty) Start() {
 	var err error
-	wp.Cmd = exec.Command("/bin/bash", "--login")
+	wp.Cmd = exec.Command(cmdFlag, "--login")
 	wp.Pty, err = pty.Start(wp.Cmd)
 	if err != nil {
 		log.Fatalf("Failed to start command: %s\n", err)
@@ -42,7 +58,7 @@ func (wp *wsPty) Stop() {
 	wp.Cmd.Wait()
 }
 
-func terminalHandler(w http.ResponseWriter, r *http.Request) {
+func ptyHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Fatalf("Websocket upgrade failed: %s\n", err)
@@ -53,8 +69,11 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 	// TODO: check for errors, return 500 on fail
 	wp.Start()
 
+	// copy everything from the pty master to the websocket
+	// using base64 encoding for now due to limitations in term.js
 	go func() {
 		buf := make([]byte, 128)
+		// TODO: more graceful exit on socket close / process exit
 		for {
 			n, err := wp.Pty.Read(buf)
 			if err != nil {
@@ -64,7 +83,6 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 
 			out := make([]byte, base64.StdEncoding.EncodedLen(n))
 			base64.StdEncoding.Encode(out, buf[0:n])
-			log.Printf("forwarding %d bytes of data as %d bytes of base64\n", len(buf), len(out))
 
 			err = conn.WriteMessage(websocket.TextMessage, out)
 
@@ -75,6 +93,8 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// read from the web socket, copying to the pty master
+	// messages are expected to be text and base64 encoded
 	for {
 		mt, payload, err := conn.ReadMessage()
 		if err != nil {
@@ -84,34 +104,36 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		log.Printf("Received: '%s'\n", string(payload))
-
 		switch mt {
 		case websocket.BinaryMessage:
-			log.Printf("Ignoring binary message...\n")
+			log.Printf("Ignoring binary message: %q\n", payload)
 		case websocket.TextMessage:
-			log.Printf("Base64: %s\n", payload)
 			buf := make([]byte, base64.StdEncoding.DecodedLen(len(payload)))
-			n, err := base64.StdEncoding.Decode(buf, payload)
-			log.Printf("Decoded %n bytes msg: %s\n", n, err)
-			log.Printf("Decode: %s\n", buf)
+			_, err := base64.StdEncoding.Decode(buf, payload)
+			if err != nil {
+				log.Printf("base64 decoding of payload failed: %s\n", err)
+			}
 			wp.Pty.Write(buf)
 		default:
 			log.Printf("Invalid message type %d\n", mt)
 			return
 		}
 	}
+
+	wp.Stop()
 }
 
 func init() {
-	addrFlag = ":9000"
+	flag.StringVar(&addrFlag, "addr", ":9000", "IP:PORT or :PORT address to listen on")
+	flag.StringVar(&cmdFlag, "cmd", "/bin/bash", "command to execute on slave side of the pty")
+	// TODO: make sure cmd exists and is executable
 }
 
 func main() {
+	flag.Parse()
 	cwd, _ := os.Getwd() // TODO: flag
 
-	// websocket that will wrap a pty
-	http.HandleFunc("/terminal", terminalHandler)
+	http.HandleFunc("/pty", ptyHandler)
 
 	// serve html & javascript
 	http.Handle("/", http.FileServer(http.Dir(cwd)))

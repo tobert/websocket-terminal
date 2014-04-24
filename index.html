@@ -1,7 +1,7 @@
 <html>
 <body>
 
-<div id="terminal1" style="width: 1024px; height: 600px; background-color: gray;"></div>
+<div id="bash" style="width: 800px; height: 400px; background-color: gray;"></div>
 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
 
@@ -9,7 +9,7 @@
 
 <script>
 $(document).ready(function(){
-  var sock = new WebSocket("ws://localhost:9000/terminal");
+  var sock = new WebSocket("ws://localhost:9000/pty");
 
   sock.onerror = function (e) {
     console.log("socket error", e);
@@ -23,7 +23,7 @@ $(document).ready(function(){
       screenKeys: true
     });
 
-    term.open(document.getElementById("terminal1"))
+    term.open(document.getElementById("bash"))
 
     term.on('title', function(title) { document.title = title; });
 
