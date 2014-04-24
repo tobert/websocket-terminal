@@ -1,0 +1,11 @@
+[Unit]
+Description=INSECURE root terminal on an open web socket
+
+[Service]
+ExecStart=/bin/websocket-terminal -addr :9000 -cmd /bin/bash -static /srv/websocket-terminal -- --login
+StandardOutput=syslog
+Restart=always
+User=root
+Group=root
+WorkingDirectory=/srv/websocket-terminal
+

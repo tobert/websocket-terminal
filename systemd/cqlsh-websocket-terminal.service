@@ -1,0 +1,11 @@
+[Unit]
+Description=INSECURE cqlsh on an open web socket
+
+[Service]
+ExecStart=/bin/websocket-terminal -addr :9001 -cmd /bin/cqlsh -static /srv/websocket-terminal
+StandardOutput=syslog
+Restart=always
+User=cqlsh
+Group=cqlsh
+WorkingDirectory=/srv/websocket-terminal
+
