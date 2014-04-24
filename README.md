@@ -4,7 +4,7 @@ Combines [term.js](https://github.com/chjj/term.js) with a
 Go websocket backend to get something much less complicated
 to deploy than [tty.js](https://github.com/chjj/tty.js).
 
-# Security
+# Security: NONE
 
 There is none. Use at your own risk.
 
