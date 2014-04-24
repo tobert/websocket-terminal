@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"github.com/gorilla/websocket"
 	"github.com/kr/pty"
 	"io"
@@ -57,11 +58,19 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, err := wp.Pty.Read(buf)
 			if err != nil {
-				log.Fatalf("Failed to read from pty master: %s", err)
+				log.Printf("Failed to read from pty master: %s", err)
+				return
 			}
-			err = conn.WriteMessage(websocket.BinaryMessage, buf)
+
+			out := make([]byte, base64.StdEncoding.EncodedLen(n))
+			base64.StdEncoding.Encode(out, buf[0:n])
+			log.Printf("forwarding %d bytes of data as %d bytes of base64\n", len(buf), len(out))
+
+			err = conn.WriteMessage(websocket.TextMessage, out)
+
 			if err != nil {
-				log.Fatalf("Failed to send %d bytes on websocket: %s", n, err)
+				log.Printf("Failed to send %d bytes on websocket: %s", n, err)
+				return
 			}
 		}
 	}()
@@ -79,10 +88,17 @@ func terminalHandler(w http.ResponseWriter, r *http.Request) {
 
 		switch mt {
 		case websocket.BinaryMessage:
-			wp.Pty.Write(payload)
+			log.Printf("Ignoring binary message...\n")
 		case websocket.TextMessage:
+			log.Printf("Base64: %s\n", payload)
+			buf := make([]byte, base64.StdEncoding.DecodedLen(len(payload)))
+			n, err := base64.StdEncoding.Decode(buf, payload)
+			log.Printf("Decoded %n bytes msg: %s\n", n, err)
+			log.Printf("Decode: %s\n", buf)
+			wp.Pty.Write(buf)
 		default:
-			log.Fatalf("Invalid message type %d\n", mt)
+			log.Printf("Invalid message type %d\n", mt)
+			return
 		}
 	}
 }
