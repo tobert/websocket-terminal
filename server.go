@@ -6,7 +6,8 @@ package main
  *
  * Usage:
  * go build -o ws-pty-proxy server.go
- * ./ws-pty-proxy -cmd /bin/bash -addr :9000
+ * ./websocket-terminal -cmd /bin/bash -addr :9000 -static $HOME/src/websocket-terminal
+ * ./websocket-terminal -cmd /bin/bash -- -i
  *
  * TODO:
  *  * make more things configurable
@@ -29,7 +30,7 @@ import (
 	"os/exec"
 )
 
-var addrFlag, cmdFlag string
+var addrFlag, cmdFlag, staticFlag string
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1,
@@ -46,7 +47,8 @@ type wsPty struct {
 
 func (wp *wsPty) Start() {
 	var err error
-	wp.Cmd = exec.Command(cmdFlag, "--login")
+	args := flag.Args()
+	wp.Cmd = exec.Command(cmdFlag, args...)
 	wp.Pty, err = pty.Start(wp.Cmd)
 	if err != nil {
 		log.Fatalf("Failed to start command: %s\n", err)
@@ -124,19 +126,20 @@ func ptyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() {
+	cwd, _ := os.Getwd()
 	flag.StringVar(&addrFlag, "addr", ":9000", "IP:PORT or :PORT address to listen on")
 	flag.StringVar(&cmdFlag, "cmd", "/bin/bash", "command to execute on slave side of the pty")
-	// TODO: make sure cmd exists and is executable
+	flag.StringVar(&staticFlag, "static", cwd, "path to static content")
+	// TODO: make sure paths exist and have correct permissions
 }
 
 func main() {
 	flag.Parse()
-	cwd, _ := os.Getwd() // TODO: flag
 
 	http.HandleFunc("/pty", ptyHandler)
 
 	// serve html & javascript
-	http.Handle("/", http.FileServer(http.Dir(cwd)))
+	http.Handle("/", http.FileServer(http.Dir(staticFlag)))
 
 	err := http.ListenAndServe(addrFlag, nil)
 	if err != nil {
