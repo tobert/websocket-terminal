@@ -17,10 +17,8 @@
 </head>
 <body>
   <div class="container-fluid">
-    <div class="col-md-1"></div>
-    <div class="col-md-5" id="bashTab"></div>
-    <div class="col-md-5" id="cqlshTab"></div>
-    <div class="col-md-1"></div>
+    <div class="col-md-6" id="bashTab"></div>
+    <div class="col-md-6" id="cqlshTab"></div>
   </div>
 
 <script src="js/jquery.min.js"></script>
@@ -34,7 +32,7 @@ $(document).ready(function(){
     sock.onopen = function(e) {
       var term = new Terminal({
         cols: 80,
-        rows: 40,
+        rows: 30,
         useStyle: true,
         screenKeys: true
       });
