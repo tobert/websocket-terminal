@@ -7,5 +7,5 @@ StandardOutput=syslog
 Restart=always
 User=root
 Group=root
-WorkingDirectory=/srv/websocket-terminal
+WorkingDirectory=/root
 

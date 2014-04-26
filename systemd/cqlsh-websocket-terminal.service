@@ -7,5 +7,5 @@ StandardOutput=syslog
 Restart=always
 User=cqlsh
 Group=cqlsh
-WorkingDirectory=/srv/websocket-terminal
+WorkingDirectory=/home/cqlsh
 
